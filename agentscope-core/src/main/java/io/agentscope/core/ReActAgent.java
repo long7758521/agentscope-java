@@ -413,9 +413,11 @@ public class ReActAgent extends AgentBase implements AutoCloseable {
         if (stateStore == null) {
             return Mono.empty();
         }
+        // 同步工具组状态
         syncToolkitToState(scope.state);
         SlotRef ref = SlotRef.parse(scope.slotKey);
         AgentState toSave = scope.state;
+        // 异步写入，不阻塞调用线程
         return Mono.<Void>fromRunnable(
                         () -> stateStore.save(ref.userId, ref.sessionId, "agent_state", toSave))
                 .subscribeOn(Schedulers.boundedElastic());

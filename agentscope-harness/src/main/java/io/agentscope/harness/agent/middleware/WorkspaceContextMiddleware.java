@@ -129,6 +129,7 @@ public class WorkspaceContextMiddleware implements MiddlewareBase {
         return Mono.just(base + separator + section);
     }
 
+    // 构建工作上下文段落 (注入 AGENTS.md / MEMORY.md / KNOWLEDGE.md)
     private String buildWorkspaceSection(RuntimeContext rc) {
         String agentsContent = workspaceManager.readAgentsMd(rc).strip();
         String memoryContent = workspaceManager.readMemoryMd(rc).strip();

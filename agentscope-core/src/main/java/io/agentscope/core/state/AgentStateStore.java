@@ -58,6 +58,7 @@ import java.util.Set;
  * Set<String> mySessions = store.listSessionIds("alice");
  * }</pre>
  */
+// AgentScope agent 状态的持久存储接口。
 public interface AgentStateStore {
 
     /**

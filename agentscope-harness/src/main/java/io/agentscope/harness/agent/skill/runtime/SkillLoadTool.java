@@ -141,6 +141,7 @@ public final class SkillLoadTool implements AgentTool {
         }
     }
 
+    // LLM 按需加载skill完整内容
     private ToolResultBlock loadOne(HarnessSkillEntry entry, String path) {
         AgentSkill skill = entry.skill();
 

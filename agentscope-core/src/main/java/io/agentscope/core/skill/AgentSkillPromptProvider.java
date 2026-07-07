@@ -173,6 +173,7 @@ public class AgentSkillPromptProvider {
      * @param filter the filter deciding which skills to include (null treated as all)
      * @return The skill system prompt, or empty string if no skills pass the filter
      */
+    // 启动时只把每个skill的元数据摘要注入系统提示词
     public String getSkillSystemPrompt(SkillFilter filter) {
         SkillFilter effectiveFilter = filter != null ? filter : SkillFilter.all();
 
@@ -294,6 +295,7 @@ public class AgentSkillPromptProvider {
         this.exposeAllMetadata = exposeAllMetadata;
     }
 
+    // 把skill的元数据摘要注入系统提示词
     private void appendSkill(StringBuilder sb, AgentSkill skill) {
         sb.append("<skill>\n");
         for (Map.Entry<String, Object> entry : getPromptMetadata(skill).entrySet()) {

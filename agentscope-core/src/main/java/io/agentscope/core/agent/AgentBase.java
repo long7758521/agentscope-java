@@ -301,6 +301,7 @@ public abstract class AgentBase implements Agent {
             RuntimeContext rc,
             Function<List<Msg>, Mono<Msg>> doCallFn,
             String requestId) {
+        // 激活会话槽位
         Object scope = beforeAgentExecution(msgs, rc);
         // Bind this call's resolved per-session state to the tracked shutdown request so graceful
         // shutdown interrupts / saves the exact (userId, sessionId) session rather than the agent's
