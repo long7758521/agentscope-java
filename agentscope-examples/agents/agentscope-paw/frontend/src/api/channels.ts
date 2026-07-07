@@ -194,3 +194,33 @@ export async function setChannelDefault(agentId: string, channelId: string): Pro
   );
   if (!res.ok && res.status !== 204) return failOn(res, 'Failed to set channel default');
 }
+
+export interface WeixinQrcodeResponse {
+  qrcode?: string;
+  qrcode_img_content?: string;
+  url?: string;
+}
+
+export interface WeixinQrcodeStatusResponse {
+  status?: 'wait' | 'scaned' | 'confirmed' | 'expired' | 'waiting' | 'scanned' | string;
+  bot_token?: string;
+  baseurl?: string;
+}
+
+export async function getWeixinQrcode(channelId: string): Promise<WeixinQrcodeResponse> {
+  const res = await fetch(
+    `/api/channels/weixin/${encodeURIComponent(channelId)}/qrcode`,
+  );
+  if (!res.ok) return failOn(res, 'Failed to load Weixin QR code');
+  return res.json();
+}
+
+export async function getWeixinQrcodeStatus(
+  channelId: string,
+  qrcode: string,
+): Promise<WeixinQrcodeStatusResponse> {
+  const url = `/api/channels/weixin/${encodeURIComponent(channelId)}/qrcode/status?qrcode=${encodeURIComponent(qrcode)}`;
+  const res = await fetch(url);
+  if (!res.ok) return failOn(res, 'Failed to poll Weixin QR status');
+  return res.json();
+}

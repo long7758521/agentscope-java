@@ -77,6 +77,10 @@
             <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-channel-gitlab</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-channel-weixin</artifactId>
+        </dependency>
 
         <!-- Git skill repository: paw delegates to GitSkillRepository for marketplace listing/fetch -->
         <dependency>

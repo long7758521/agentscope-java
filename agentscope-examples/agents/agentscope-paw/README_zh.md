@@ -6,7 +6,7 @@
 
 AgentScope Paw 是 [QwenPaw] 的 Java 版本 —— 一款装在你自己电脑上的个人助手。它以你的身份、在你的文件系统和 shell 里干活，并且会随着使用慢慢"长大"：它学到的技能、孵化的子智能体、攒下的记忆，都只是它自己在工作区里写的一堆文件。
 
-它擅长的另一件事，是**直接出现在你已经在用的地方**。开箱即支持钉钉、企业微信、飞书、GitHub 和 GitLab，所以你可以从一条 DM、或者一个 Issue 评论里 @ 它，不必再多开一个网页。
+它擅长的另一件事，是**直接出现在你已经在用的地方**。开箱即支持钉钉、企业微信、微信个人号、飞书、GitHub 和 GitLab，所以你可以从一条 DM、或者一个 Issue 评论里 @ 它，不必再多开一个网页。
 
 paw 故意不去做更多的事 —— 没有登录、没有多租户隔离、没有 Docker sandbox、不做横向扩展。如果你需要这些 —— 想把 paw 风格的 agent 托管给一个团队，或者想让 agent 跑不可信代码而互相隔离 —— 请看姊妹项目 [agentscope-builder](../agentscope-builder/) 和 [agentscope-dataagent](../agentscope-dataagent/)。
 
@@ -18,7 +18,7 @@ paw 故意不去做更多的事 —— 没有登录、没有多租户隔离、�
 | **用户数** | 1 人 —— 你自己 |
 | **隔离** | 无 —— 直接以你的身份运行，可访问你的 Shell |
 | **自进化** | ✅ 技能、子智能体、记忆、`AGENTS.md` 都是 agent 自己会写的工作区文件 |
-| **通道** | 内置 Web UI + 钉钉 · 企业微信 · 飞书 · GitHub · GitLab |
+| **通道** | 内置 Web UI + 钉钉 · 企业微信 · 微信个人号 · 飞书 · GitHub · GitLab |
 | **分布式** | ❌ 单进程、单节点 |
 | **文件系统** | `LocalFilesystemWithShell` —— 直连本机 FS + Shell |
 
@@ -35,8 +35,8 @@ paw 是一个轻量的 Spring Boot 应用，把 **HarnessAgent** 直接挂载到
 │  │  ├ dingtalk 钉钉    │   │   ├ Skills · Sub-agents · MCP   │  │
 │  │  ├ wecom · feishu   │   │   └ 自进化循环                  │  │
 │  │  └ github · gitlab  │   └────────────┬────────────────────┘  │
-│  └─────────────────────┘                ▼                       │
-│                          ┌──────────────────────────────────┐   │
+│  │     · weixin        │                ▼                       │
+│  └─────────────────────┘   ┌──────────────────────────────────┐   │
 │                          │  LocalFilesystemWithShell        │   │
 │                          │   ├ 本机 FS（~/.agentscope/...） │   │
 │                          │   └ 本机 Shell（bash / zsh）     │   │
@@ -103,6 +103,7 @@ UI 上点 **New agent** 按钮可以基于空白脚手架、内置模板或 AI �
 | `feishu` | 入 + 出 | HTTP 事件回调 + REST API | 自建应用 + 事件订阅，需要公网 HTTPS |
 | `github` | 入 + 出 | Webhook + REST API | 监听 issue / PR review comment 事件，需要公网 HTTPS |
 | `gitlab` | 入 + 出 | Webhook + REST API | 监听 Issue / MR Note Hook（自建 GitLab 也行），需要公网 HTTPS |
+| `weixin` | 入 + 出 | iLink 长轮询（无需公网 webhook） | 微信个人号；首次在 Channels 详情页扫码登录，推荐 `PER_PEER` dmScope |
 
 ### 通道配置 schema
 
@@ -111,7 +112,7 @@ UI 上点 **New agent** 按钮可以基于空白脚手架、内置模板或 AI �
 ```json
 "channels": {
   "<channelId>": {
-    "type": "dingtalk | wecom | feishu | github | gitlab | chatui",
+    "type": "dingtalk | wecom | feishu | github | gitlab | weixin | chatui",
     "defaultAgentId": "main",
     "dmScope": "MAIN | PER_PEER | PER_CHANNEL_PEER | PER_ACCOUNT_CHANNEL_PEER",
     "disabled": false,

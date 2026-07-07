@@ -10,7 +10,7 @@ better over time: the skills it learns, the sub-agents it spawns, and the
 memory it keeps are all just files in a workspace it edits for itself.
 
 The other thing it does well is meet you where you already work. Out of the
-box it talks to DingTalk, WeCom, Feishu/Lark, GitHub and GitLab, so you can
+box it talks to DingTalk, WeCom, Weixin personal, Feishu/Lark, GitHub and GitLab, so you can
 ping it from a DM or @-mention it on an issue instead of opening yet another
 browser tab.
 
@@ -28,7 +28,7 @@ and [agentscope-dataagent](../agentscope-dataagent/) cover those use cases.
 | **Users** | One — the operator of the machine |
 | **Isolation** | None — runs as you, with full access to your shell |
 | **Self-evolution** | ✅ Skills, sub-agents, memory and `AGENTS.md` are all just files the agent grows over time |
-| **Channels** | Built-in web UI + DingTalk · WeCom · Feishu/Lark · GitHub · GitLab |
+| **Channels** | Built-in web UI + DingTalk · WeCom · Weixin personal · Feishu/Lark · GitHub · GitLab |
 | **Distribution** | ❌ Single process, single node |
 | **Filesystem** | `LocalFilesystemWithShell` — direct host filesystem + shell |
 
@@ -126,6 +126,7 @@ web UI talks to one shared session per agent. Additional channel adapters
 | `feishu` | inbound + outbound | HTTP event callback + REST API | Custom app with event subscription; needs a public HTTPS URL. |
 | `github` | inbound + outbound | Webhook + REST API | Reacts to issue / PR review comments. Needs a public HTTPS URL. |
 | `gitlab` | inbound + outbound | Webhook + REST API | Reacts to Issue / MR Note Hooks. Needs a public HTTPS URL (self-hosted GitLab works too). |
+| `weixin` | inbound + outbound | iLink long-poll (no public webhook) | WeChat personal account; scan QR on the channel detail page on first login. Prefer `PER_PEER` dmScope. |
 
 ### Config schema
 
@@ -134,7 +135,7 @@ Every channel entry under `channels` shares the same skeleton:
 ```json
 "channels": {
   "<channelId>": {
-    "type": "dingtalk | wecom | feishu | github | gitlab | chatui",
+    "type": "dingtalk | wecom | feishu | github | gitlab | weixin | chatui",
     "defaultAgentId": "main",
     "dmScope": "MAIN | PER_PEER | PER_CHANNEL_PEER | PER_ACCOUNT_CHANNEL_PEER",
     "disabled": false,

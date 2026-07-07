@@ -57,6 +57,7 @@ function typeBadge(type: string): { bg: string; fg: string; bd: string } {
     case 'chatui':   return { bg: '#eef2ff', fg: '#4338ca', bd: '#c7d2fe' };
     case 'dingtalk': return { bg: '#fef3c7', fg: '#92400e', bd: '#fcd34d' };
     case 'wecom':    return { bg: '#dcfce7', fg: '#166534', bd: '#86efac' };
+    case 'weixin':   return { bg: '#ecfdf5', fg: '#047857', bd: '#6ee7b7' };
     default:         return { bg: '#f1f5f9', fg: '#475569', bd: '#e2e8f0' };
   }
 }
@@ -118,7 +119,7 @@ export default function ChannelsHubPage() {
       </div>
 
       <p style={S.blurb}>
-        Channels are inbound surfaces (chatui, DingTalk, WeCom, …) registered in <code style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: 4, fontSize: '0.92em' }}>agentscope.json</code>.
+        Channels are inbound surfaces (chatui, DingTalk, WeCom, Weixin personal, …) registered in <code style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: 4, fontSize: '0.92em' }}>agentscope.json</code>.
         Each channel owns its bindings and routes incoming messages to agents. Changes apply immediately —
         the channel is unregistered and re-registered in place.
       </p>
@@ -216,6 +217,8 @@ interface CreateProps {
   onCreated: (channelId: string) => void;
 }
 
+const WEIXIN_DEFAULT_PROPS = '{\n  "mediaDownloadEnabled": true\n}\n';
+
 function ChannelCreateDialog({ types, onClose, onCreated }: CreateProps) {
   const [channelId, setChannelId] = useState('');
   const [type, setType] = useState(types[0] ?? '');
@@ -224,6 +227,14 @@ function ChannelCreateDialog({ types, onClose, onCreated }: CreateProps) {
   const [propsJson, setPropsJson] = useState('{\n}');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  function handleTypeChange(nextType: string) {
+    setType(nextType);
+    if (nextType === 'weixin') {
+      setDmScope('PER_PEER');
+      setPropsJson(WEIXIN_DEFAULT_PROPS);
+    }
+  }
 
   async function handleSave() {
     setErr(null);
@@ -288,7 +299,7 @@ function ChannelCreateDialog({ types, onClose, onCreated }: CreateProps) {
           </div>
           <div>
             <label style={S.formField}>Type</label>
-            <select style={S.input} value={type} onChange={e => setType(e.target.value)}>
+            <select style={S.input} value={type} onChange={e => handleTypeChange(e.target.value)}>
               {types.length === 0 && <option value="">— no types registered —</option>}
               {types.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -313,6 +324,11 @@ function ChannelCreateDialog({ types, onClose, onCreated }: CreateProps) {
 
         <div style={{ marginTop: 14 }}>
           <label style={S.formField}>Properties (JSON object, type-specific)</label>
+          {type === 'weixin' && (
+            <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: 8 }}>
+              After creating, open the channel detail page to scan the Weixin login QR code.
+            </div>
+          )}
           <textarea
             style={{ ...S.input, fontFamily: 'monospace', minHeight: 140, resize: 'vertical' }}
             value={propsJson}

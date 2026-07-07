@@ -35,7 +35,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * isolation. All persistent state lives under {@code ${claw.home}} (default
  * {@code ~/.agentscope/claw}).
  */
-@SpringBootApplication
+@SpringBootApplication(
+        scanBasePackages = {"io.agentscope.claw2", "io.agentscope.extensions.channel.weixin"})
 public class Claw2App {
     public static void main(String[] args) {
         SpringApplication.run(Claw2App.class, args);

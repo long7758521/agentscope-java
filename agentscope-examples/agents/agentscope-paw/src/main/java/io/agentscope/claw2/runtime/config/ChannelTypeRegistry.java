@@ -20,6 +20,7 @@ import io.agentscope.extensions.channel.feishu.FeishuChannel;
 import io.agentscope.extensions.channel.github.GitHubChannel;
 import io.agentscope.extensions.channel.gitlab.GitLabChannel;
 import io.agentscope.extensions.channel.wecom.WeComChannel;
+import io.agentscope.extensions.channel.weixin.WeixinChannel;
 import io.agentscope.harness.agent.gateway.channel.ChannelFactory;
 import io.agentscope.harness.agent.gateway.channel.chatui.ChatUiChannel;
 import java.util.Map;
@@ -34,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code agentscope.json}.
  *
  * <p>Built-in types: {@code chatui}, {@code dingtalk}, {@code wecom}, {@code feishu},
- * {@code github}, {@code gitlab}. Callers may {@link #register(String, ChannelFactory) register}
+ * {@code github}, {@code gitlab}, {@code weixin}. Callers may {@link #register(String, ChannelFactory) register}
  * additional types before {@link io.agentscope.claw2.runtime.ClawBootstrap.Builder#build()} runs.
  */
 public final class ChannelTypeRegistry {
@@ -51,6 +52,7 @@ public final class ChannelTypeRegistry {
         register(FeishuChannel.TYPE, FeishuChannel::fromProperties);
         register(GitHubChannel.TYPE, GitHubChannel::fromProperties);
         register(GitLabChannel.TYPE, GitLabChannel::fromProperties);
+        register(WeixinChannel.TYPE, WeixinChannel::fromProperties);
     }
 
     private ChannelTypeRegistry() {}

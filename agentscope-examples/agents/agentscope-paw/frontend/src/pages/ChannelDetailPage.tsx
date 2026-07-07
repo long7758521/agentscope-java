@@ -11,6 +11,7 @@ import {
   listChannelTypes,
   updateChannel,
 } from '../api/channels';
+import WeixinQrLoginPanel from '../components/WeixinQrLoginPanel';
 
 const DM_SCOPES = ['', 'MAIN', 'PER_PEER', 'PER_CHANNEL_PEER', 'PER_ACCOUNT_CHANNEL_PEER'];
 const SCOPES = DM_SCOPES.filter(Boolean);
@@ -238,6 +239,11 @@ export default function ChannelDetailPage() {
     return detail.started ? 'running' : 'stopped';
   }, [detail]);
 
+  const hasBotToken = useMemo(() => {
+    const token = detail?.properties?.botToken;
+    return typeof token === 'string' && token.trim().length > 0;
+  }, [detail]);
+
   if (!detail && !err) {
     return <div style={S.root}>Loading…</div>;
   }
@@ -301,6 +307,15 @@ export default function ChannelDetailPage() {
               <button style={{ ...S.btn, ...S.btnPrimary }} onClick={() => persist()}>Save configuration</button>
             </div>
           </div>
+
+          {type === 'weixin' && (
+            <WeixinQrLoginPanel
+              channelId={channelId}
+              hasBotToken={hasBotToken}
+              started={detail.started}
+              onLoginSuccess={() => void load()}
+            />
+          )}
 
           <div style={S.section}>
             <div style={S.sectionHead}>

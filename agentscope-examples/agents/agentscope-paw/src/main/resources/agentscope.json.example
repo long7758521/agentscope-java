@@ -19,6 +19,16 @@
     "chatui": {
       "defaultAgentId": "default",
       "dmScope": "MAIN"
+    },
+    "my-weixin": {
+      "type": "weixin",
+      "defaultAgentId": "default",
+      "dmScope": "PER_PEER",
+      "disabled": true,
+      "properties": {
+        "mediaDownloadEnabled": true,
+        "mediaDir": "data/weixin/my-weixin"
+      }
     }
   }
 }
