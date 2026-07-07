@@ -82,8 +82,8 @@ ReActAgent agent =
 :::{tab-item} 显式 Model builder
 ```java
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.tool.Toolkit;
 
 ReActAgent agent =
@@ -131,7 +131,7 @@ ReActAgent agent =
 ::::
 
 :::{tip}
-`ModelRegistry` 的字符串形式（`<provider>:<model>`）支持 `dashscope` / `openai` / `anthropic` / `gemini` / `ollama`，会自动从环境变量读取 API key（`DASHSCOPE_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`）。需要在长期运行场景下同时获得工作区、会话持久化、记忆压缩、子 agent 等能力，请改用 [`HarnessAgent`](../harness/architecture.md) —— 它对 `ReActAgent` 做了一层薄包装，builder 接口大体一致。
+`ModelRegistry` 的字符串形式（`<provider>:<model>`）需要对应的模型扩展模块在 classpath 中。它支持 `dashscope` / `openai` / `anthropic` / `gemini` / `ollama`，会自动从环境变量读取 API key（`DASHSCOPE_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`）。需要在长期运行场景下同时获得工作区、会话持久化、记忆压缩、子 agent 等能力，请改用 [`HarnessAgent`](../harness/architecture.md) —— 它对 `ReActAgent` 做了一层薄包装，builder 接口大体一致。
 :::
 
 ### 参数说明
@@ -255,7 +255,7 @@ agent.streamEvents(new UserMessage("总结一下 README 的内容。"))
                 System.out.print(((TextBlockDeltaEvent) event).getDelta());
             } else if (event.getType() == AgentEventType.TOOL_CALL_START) {
                 // 智能体即将调用工具 —— 展示调用信息
-                System.out.println("\n[tool] " + ((ToolCallStartEvent) event).getToolName());
+                System.out.println("\n[tool] " + ((ToolCallStartEvent) event).getToolCallName());
             }
             // 其他事件：思考块、工具结果、回复结束等
         })
@@ -314,7 +314,7 @@ Msg result = agent.call(List.of(new UserMessage("Hi.")), ctx).block();
 ### 谁能读到
 
 - **Tool**（`@Tool` 方法或 `ToolBase.callAsync`）—— 见 [Tool — 接收 Context](./tool.md#接收-context)。
-- **Middleware**（`MiddlewareBase` 所有 hook）—— 通过 `agent.getRuntimeContext()` 取当前实例。详见 [Middleware — 读取 RuntimeContext](./middleware.md#读取-runtimecontext)。
+- **Middleware**（`MiddlewareBase` 所有 hook）—— 作为第二个参数 `ctx` 直接传入。详见 [Middleware — 读取 RuntimeContext](./middleware.md#读取-runtimecontext)。
 - **同一次调用的所有线程**—— `RuntimeContext` 内部使用 `ConcurrentMap`，hook / tool 之间可以读写同一实例做协调。
 
 ### 与持久化的关系

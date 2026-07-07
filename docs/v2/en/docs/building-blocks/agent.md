@@ -82,8 +82,8 @@ ReActAgent agent =
 :::{tab-item} Explicit Model builder
 ```java
 import io.agentscope.core.ReActAgent;
-import io.agentscope.core.formatter.dashscope.DashScopeChatFormatter;
-import io.agentscope.core.model.DashScopeChatModel;
+import io.agentscope.extensions.model.dashscope.formatter.DashScopeChatFormatter;
+import io.agentscope.extensions.model.dashscope.DashScopeChatModel;
 import io.agentscope.core.tool.Toolkit;
 
 ReActAgent agent =
@@ -131,7 +131,7 @@ ReActAgent agent =
 ::::
 
 :::{tip}
-The `ModelRegistry` string form (`<provider>:<model>`) supports `dashscope` / `openai` / `anthropic` / `gemini` / `ollama` and reads the matching API key (`DASHSCOPE_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`) from the environment. For long-running scenarios that also need a workspace, session persistence, memory compaction, subagents, and so on, use [`HarnessAgent`](../harness/architecture.md) — it is a thin wrapper around `ReActAgent` with a largely identical builder.
+The `ModelRegistry` string form (`<provider>:<model>`) requires the matching model extension module on the classpath. It supports `dashscope` / `openai` / `anthropic` / `gemini` / `ollama` and reads the matching API key (`DASHSCOPE_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`) from the environment. For long-running scenarios that also need a workspace, session persistence, memory compaction, subagents, and so on, use [`HarnessAgent`](../harness/architecture.md) — it is a thin wrapper around `ReActAgent` with a largely identical builder.
 :::
 
 ### Builder fields
@@ -255,7 +255,7 @@ agent.streamEvents(new UserMessage("Summarize the README."))
                 System.out.print(((TextBlockDeltaEvent) event).getDelta());
             } else if (event.getType() == AgentEventType.TOOL_CALL_START) {
                 // The agent is about to call a tool — surface the call info
-                System.out.println("\n[tool] " + ((ToolCallStartEvent) event).getToolName());
+                System.out.println("\n[tool] " + ((ToolCallStartEvent) event).getToolCallName());
             }
             // Other events: thinking blocks, tool results, reply end, etc.
         })
@@ -314,7 +314,7 @@ Msg result = agent.call(List.of(new UserMessage("Hi.")), ctx).block();
 ### Who reads it
 
 - **Tools** (`@Tool` methods and `ToolBase.callAsync`) — see [Tool — Receiving context](./tool.md#receiving-context).
-- **Middleware** (every `MiddlewareBase` hook) — call `agent.getRuntimeContext()`. See [Middleware — Reading RuntimeContext](./middleware.md#reading-runtimecontext).
+- **Middleware** (every `MiddlewareBase` hook) — received as the second parameter `ctx`. See [Middleware — Reading RuntimeContext](./middleware.md#reading-runtimecontext).
 - **All threads within the same call** — the internal maps are `ConcurrentMap`s, so hooks and tools can read/write the same instance to coordinate.
 
 ### Relation to persistence

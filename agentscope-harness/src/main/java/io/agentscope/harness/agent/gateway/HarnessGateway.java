@@ -19,11 +19,14 @@ import io.agentscope.core.ReActAgent;
 import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
+import io.agentscope.core.event.AgentResultEvent;
 import io.agentscope.core.message.Msg;
 import io.agentscope.harness.agent.HarnessAgent;
+import io.agentscope.harness.agent.bus.MessageBus;
 import io.agentscope.harness.agent.gateway.channel.OutboundAddress;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -51,11 +54,12 @@ import reactor.core.scheduler.Schedulers;
  *   <li>Outbound address tracking for proactive delivery (e.g. subagent announces)
  * </ul>
  */
-public final class HarnessGateway implements Gateway {
+public final class HarnessGateway implements Gateway, WakeupDispatcher.WakeupTarget {
 
     private static final Logger log = LoggerFactory.getLogger(HarnessGateway.class);
 
     private final ChannelManager channelManager;
+    private final MessageBus messageBus;
     private final SessionTurnGate sessionTurnGate = new SessionTurnGate();
 
     private final AtomicReference<HarnessAgent> mainAgent = new AtomicReference<>();
@@ -64,6 +68,9 @@ public final class HarnessGateway implements Gateway {
 
     /** canonicalKey → stable session id */
     private final ConcurrentHashMap<String, String> sessionMap = new ConcurrentHashMap<>();
+
+    /** Reverse mapping: session id → canonicalKey (for wakeup-driven runs). */
+    private final ConcurrentHashMap<String, String> sessionToGateKey = new ConcurrentHashMap<>();
 
     /** Live-agent cache for the fast same-node path: subagentId → exposed subagent session. */
     private final ConcurrentHashMap<String, ExposedSession> exposedSessions =
@@ -87,18 +94,30 @@ public final class HarnessGateway implements Gateway {
     private final ConcurrentHashMap<String, OutboundAddress> lastRouteBySession =
             new ConcurrentHashMap<>();
 
-    private HarnessGateway(ChannelManager channelManager) {
+    private HarnessGateway(ChannelManager channelManager, MessageBus messageBus) {
         this.channelManager = channelManager;
+        this.messageBus = messageBus;
     }
 
     /** Creates a gateway with a channel manager for outbound delivery. */
     public static HarnessGateway create(ChannelManager channelManager) {
-        return new HarnessGateway(Objects.requireNonNull(channelManager, "channelManager"));
+        return new HarnessGateway(Objects.requireNonNull(channelManager, "channelManager"), null);
+    }
+
+    /** Creates a gateway with a channel manager and message bus. */
+    public static HarnessGateway create(ChannelManager channelManager, MessageBus messageBus) {
+        return new HarnessGateway(
+                Objects.requireNonNull(channelManager, "channelManager"), messageBus);
     }
 
     /** Creates a gateway without outbound delivery support. */
     public static HarnessGateway create() {
-        return new HarnessGateway(null);
+        return new HarnessGateway(null, null);
+    }
+
+    /** Returns the message bus, or null if not configured. */
+    public MessageBus messageBus() {
+        return messageBus;
     }
 
     /** The channel manager for outbound delivery, or null if not configured. */
@@ -149,7 +168,7 @@ public final class HarnessGateway implements Gateway {
                             "HarnessGateway.bindMainAgent must be called before run(...)"));
         }
 
-        String sessionId = sessionMap.computeIfAbsent(gateKey, k -> generateSessionId());
+        String sessionId = resolveSessionId(gateKey);
 
         if (outboundAddress != null) {
             lastRouteBySession.put(sessionId, outboundAddress);
@@ -183,7 +202,7 @@ public final class HarnessGateway implements Gateway {
                             "HarnessGateway.bindMainAgent must be called before runStream(...)"));
         }
 
-        String sessionId = sessionMap.computeIfAbsent(gateKey, k -> generateSessionId());
+        String sessionId = resolveSessionId(gateKey);
 
         if (outboundAddress != null) {
             lastRouteBySession.put(sessionId, outboundAddress);
@@ -387,8 +406,8 @@ public final class HarnessGateway implements Gateway {
         return (id != null && !id.isBlank()) ? id : "main";
     }
 
-    private static String generateSessionId() {
-        return "gw-" + UUID.randomUUID();
+    private static String generateSessionId(String gateKey) {
+        return "gw-" + SessionIdUtils.deterministicHash(gateKey);
     }
 
     @Override
@@ -418,6 +437,111 @@ public final class HarnessGateway implements Gateway {
                                 + agent.getClass().getName()
                                 + " does not support streaming"));
     }
+
+    // ------------------------------------------------------------------
+    //  Session helpers
+    // ------------------------------------------------------------------
+
+    private String resolveSessionId(String gateKey) {
+        String sessionId = sessionMap.computeIfAbsent(gateKey, HarnessGateway::generateSessionId);
+        sessionToGateKey.put(sessionId, gateKey);
+        return sessionId;
+    }
+
+    /**
+     * Returns {@code true} when the given session is currently inside a gated turn (a run is in
+     * progress). Used by {@link WakeupDispatcher} to skip sessions that will naturally drain their
+     * inbox on the current reasoning step.
+     */
+    public boolean isSessionRunning(String sessionId) {
+        String gateKey = sessionToGateKey.get(sessionId);
+        return gateKey != null && sessionTurnGate.isRunning(gateKey);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Delegates to {@link #runWakeup(String, String)} with a {@code null} user id.
+     *
+     * @deprecated use {@link #runWakeup(String, String)} so the wakeup-driven round loads agent
+     *     state from the correct {@code (userId, sessionId)} slot. This overload preserves legacy
+     *     anonymous-wakeup behavior.
+     */
+    @Deprecated
+    @Override
+    public Mono<Msg> runWakeup(String sessionId) {
+        return runWakeup(null, sessionId);
+    }
+
+    /**
+     * Triggers a wakeup-driven run for an idle session, propagating the owning user id when
+     * present. Called by {@link WakeupDispatcher} when a background task completes or a team
+     * message arrives. The agent starts a reasoning round with no user input; {@link
+     * io.agentscope.harness.agent.middleware.InboxMiddleware} drains the inbox and injects the
+     * pending results as context.
+     *
+     * <p>When {@code userId} is non-blank it is set on the {@link RuntimeContext}, so the agent
+     * loads state from the same {@code (userId, sessionId)} slot as the original user-driven run
+     * — matching {@code runStream}. A blank or null user id preserves the legacy anonymous
+     * behavior.
+     *
+     * @param userId the owning user id carried by the wakeup entry; may be {@code null} or blank
+     * @param sessionId the session to wake up
+     * @return the agent's response, or {@link Mono#empty()} if the session is unknown
+     */
+    @Override
+    public Mono<Msg> runWakeup(String userId, String sessionId) {
+        String gateKey = sessionToGateKey.get(sessionId);
+        if (gateKey == null) {
+            log.debug("runWakeup: unknown sessionId={}, skipping", sessionId);
+            return Mono.empty();
+        }
+        HarnessAgent ha = resolveAgent(null);
+        if (ha == null) {
+            return Mono.empty();
+        }
+        RuntimeContext.Builder rtcBuilder =
+                RuntimeContext.builder()
+                        .sessionId(sessionId)
+                        .put("gateKey", gateKey)
+                        .put("outboundAddress", lastRouteBySession.get(sessionId));
+        if (userId != null && !userId.isBlank()) {
+            rtcBuilder.userId(userId);
+        }
+        RuntimeContext rtc = rtcBuilder.build();
+
+        if (messageBus == null) {
+            return withGatedTurn(gateKey, () -> ha.call(List.of(), rtc));
+        }
+
+        return withGatedTurn(
+                gateKey,
+                () ->
+                        ha.streamEvents(List.of(), rtc)
+                                .doOnNext(event -> publishEventToSession(sessionId, event))
+                                .filter(e -> e instanceof AgentResultEvent)
+                                .cast(AgentResultEvent.class)
+                                .map(AgentResultEvent::getResult)
+                                .last());
+    }
+
+    private void publishEventToSession(String sessionId, AgentEvent event) {
+        try {
+            Map<String, Object> payload =
+                    io.agentscope.core.util.JsonUtils.getJsonCodec()
+                            .convertValue(
+                                    event,
+                                    new com.fasterxml.jackson.core.type.TypeReference<
+                                            Map<String, Object>>() {});
+            messageBus.sessionPublishEvent(sessionId, payload).subscribe();
+        } catch (Exception e) {
+            log.debug("Failed to publish event to session {}: {}", sessionId, e.getMessage());
+        }
+    }
+
+    // ------------------------------------------------------------------
+    //  Turn serialization
+    // ------------------------------------------------------------------
 
     private Mono<Msg> withGatedTurn(String gateKey, Supplier<Mono<Msg>> turn) {
         AtomicBoolean acquired = new AtomicBoolean(false);
