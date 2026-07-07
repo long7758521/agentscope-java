@@ -274,8 +274,8 @@ public class ILinkClient {
         msg.put("from_user_id", "");
         msg.put("to_user_id", toUserId);
         msg.put("client_id", UUID.randomUUID().toString());
-        msg.put("message_type", 2); // BOT
-        msg.put("message_state", 2); // FINISH
+        msg.put("message_type", 2); // 机器人
+        msg.put("message_state", 2); // 完成
         msg.put("context_token", contextToken);
         msg.put("item_list", List.of(Map.of("type", 1, "text_item", Map.of("text", text))));
         sendMessage(msg);

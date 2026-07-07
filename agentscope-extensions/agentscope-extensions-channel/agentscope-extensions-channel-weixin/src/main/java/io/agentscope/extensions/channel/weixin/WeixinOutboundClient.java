@@ -44,21 +44,20 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * Outbound client wrapping {@link ILinkClient} for sending {@link Msg} payloads to WeChat
- * personal accounts via the iLink Bot sendmessage API.
+ * 出站客户端，封装 {@link ILinkClient}，通过 iLink Bot sendmessage API 将 {@link Msg}
+ * 负载发送到微信个人号。
  *
- * <p>Address format expected on {@link OutboundAddress#to()}: {@code "channelId:kind:peerId"}
- * (matches {@code DingTalkOutboundClient.parseAddress}). When the kind segment is absent the
- * peer is treated as {@link PeerKind#DIRECT}.
+ * <p>{@link OutboundAddress#to()} 期望的地址格式为 {@code "channelId:kind:peerId"}
+ * （与 {@code DingTalkOutboundClient.parseAddress} 一致）。当 kind 段缺失时，
+ * 对端被视为 {@link PeerKind#DIRECT}。
  *
- * <p>Each {@link Msg}'s {@code content} blocks are dispatched one-by-one to iLink — text
- * blocks become text items; image/video/audio/file blocks are resolved to bytes (from
- * {@link URLSource} via HTTP or {@code file://}, or from {@link Base64Source} via decoding)
- * and routed to the corresponding {@link ILinkClient} send method, which performs AES
- * encryption + CDN upload internally.
+ * <p>每个 {@link Msg} 的 {@code content} 块逐个分发到 iLink——文本块转为 text item；
+ * image/video/audio/file 块解析为字节（来自 {@link URLSource} 走 HTTP 或 {@code file://}，
+ * 或来自 {@link Base64Source} 走解码）后路由到对应的 {@link ILinkClient} 发送方法，
+ * 该方法内部执行 AES 加密 + CDN 上传。
  *
- * <p>Because {@link ILinkClient} is blocking, sends are scheduled on
- * {@link Schedulers#boundedElastic()}.
+ * <p>由于 {@link ILinkClient} 是阻塞的，发送操作调度在
+ * {@link Schedulers#boundedElastic()} 上执行。
  */
 public final class WeixinOutboundClient {
 
@@ -77,7 +76,7 @@ public final class WeixinOutboundClient {
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
 
-    /** Sends each {@code msg} to the resolved peer. */
+    /** 将每条 {@code msg} 发送到解析出的对端。 */
     public Mono<Void> send(OutboundAddress address, List<Msg> messages) {
         if (messages == null || messages.isEmpty()) {
             return Mono.empty();
@@ -154,7 +153,7 @@ public final class WeixinOutboundClient {
         }
     }
 
-    /** Resolves a {@link Source} to its raw bytes (URL → fetch, file:// → read, Base64 → decode). */
+    /** 将 {@link Source} 解析为原始字节（URL → 拉取，file:// → 读取，Base64 → 解码）。 */
     private byte[] resolveBytes(Source src) throws Exception {
         if (src == null) return null;
         if (src instanceof URLSource u) {
@@ -184,7 +183,7 @@ public final class WeixinOutboundClient {
         return null;
     }
 
-    /** Parses {@code "channelId:kind:peerId"} (or {@code "peerId"}) into a {@link PeerTarget}. */
+    /** 将 {@code "channelId:kind:peerId"}（或 {@code "peerId"}）解析为 {@link PeerTarget}。 */
     static PeerTarget parseAddress(OutboundAddress address) {
         String to = address.to();
         if (to == null || to.isBlank()) {

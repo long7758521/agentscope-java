@@ -18,11 +18,11 @@ package io.agentscope.extensions.channel.weixin;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Process-wide lookup table from {@code channelId} to {@link WeixinChannel}. Used by
- * {@link WeixinQrAuthController} to dispatch QR-login status updates to the correct channel
- * so it can refresh its bot_token and restart the long-poll loop.
+ * 进程级 {@code channelId} → {@link WeixinChannel} 查找表。供
+ * {@link WeixinQrAuthController} 将扫码登录状态更新派发到正确的通道，
+ * 以便其刷新 bot_token 并重启长轮询循环。
  *
- * <p>Mirrors {@code FeishuChannelRegistry} / {@code WeComChannelRegistry}.
+ * <p>仿照 {@code FeishuChannelRegistry} / {@code WeComChannelRegistry}。
  */
 public final class WeixinChannelRegistry {
 
@@ -32,7 +32,7 @@ public final class WeixinChannelRegistry {
 
     private WeixinChannelRegistry() {}
 
-    /** Returns the process-wide singleton instance. */
+    /** 返回进程级单例实例。 */
     public static WeixinChannelRegistry instance() {
         return INSTANCE;
     }

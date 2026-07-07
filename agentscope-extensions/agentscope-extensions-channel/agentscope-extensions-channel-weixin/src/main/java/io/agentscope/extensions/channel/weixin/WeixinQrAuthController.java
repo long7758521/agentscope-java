@@ -27,23 +27,20 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * QR scan login endpoints for the WeChat personal (iLink Bot) channel.
+ * 微信个人号（iLink Bot）通道的扫码登录端点。
  *
- * <p>Unlike Feishu/WeCom callbacks (which receive inbound messages via webhook POSTs),
- * the iLink Bot channel uses long-polling for inbound and only needs HTTP endpoints for the
- * one-time QR-login handshake:
+ * <p>与飞书/企微回调（通过 webhook POST 接收入站消息）不同，iLink Bot 通道
+ * 入站使用长轮询，仅需要一次性扫码登录握手的 HTTP 端点：
  *
  * <ol>
- *   <li>{@code GET /api/channels/weixin/{channelId}/qrcode} — fetch a fresh login QR code
- *       from iLink ({@code /ilink/bot/get_bot_qrcode?bot_type=3}).</li>
- *   <li>{@code GET /api/channels/weixin/{channelId}/qrcode/status?qrcode=...} — poll scan
- *       status; on {@code confirmed} the channel's bot_token is replaced and the poll loop
- *       is restarted.</li>
+ *   <li>{@code GET /api/channels/weixin/{channelId}/qrcode} —— 从 iLink 获取新的登录二维码
+ *       （{@code /ilink/bot/get_bot_qrcode?bot_type=3}）。</li>
+ *   <li>{@code GET /api/channels/weixin/{channelId}/qrcode/status?qrcode=...} —— 轮询扫码状态；
+ *       状态为 {@code confirmed} 时替换通道的 bot_token 并重启轮询循环。</li>
  * </ol>
  *
- * <p>The controller relies on the host Spring Boot app's component scan to pick up
- * {@code @RestController}; the extension module itself ships no AutoConfiguration
- * (mirrors the dingtalk/feishu pattern).
+ * <p>该控制器依赖宿主 Spring Boot 应用的组件扫描来识别 {@code @RestController}；
+ * 扩展模块本身不提供 AutoConfiguration（与钉钉/飞书模式一致）。
  */
 @RestController
 @RequestMapping("/api/channels/weixin")
@@ -61,8 +58,8 @@ public class WeixinQrAuthController {
         this.registry = registry;
     }
 
-    /** Fetches a new login QR code from iLink. The response shape is whatever iLink returns
-     *  (typically {@code qrcode}, {@code qrcode_img_content} base64 PNG, {@code url}). */
+    /** 从 iLink 获取新的登录二维码。响应结构由 iLink 返回
+     *  （通常为 {@code qrcode}、{@code qrcode_img_content} base64 PNG、{@code url}）。 */
     @GetMapping("/{channelId}/qrcode")
     public ResponseEntity<Map<String, Object>> qrcode(@PathVariable String channelId) {
         WeixinChannel channel = registry.get(channelId);
@@ -78,8 +75,8 @@ public class WeixinQrAuthController {
         }
     }
 
-    /** Polls scan status. On {@code confirmed} updates the channel's bot_token + baseUrl
-     *  and restarts the long-poll loop. */
+    /** 轮询扫码状态。状态为 {@code confirmed} 时更新通道的 bot_token + baseUrl
+     *  并重启长轮询循环。 */
     @GetMapping("/{channelId}/qrcode/status")
     public ResponseEntity<Map<String, Object>> status(
             @PathVariable String channelId, @RequestParam String qrcode) {

@@ -42,27 +42,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Parses an iLink Bot inbound {@code msgs} element into an {@link InboundMessage}.
+ * 将 iLink Bot 入站 {@code msgs} 元素解析为 {@link InboundMessage}。
  *
- * <p>Only {@code message_type == 1} (user→bot) payloads are dispatched; other types
- * (bot→user echoes, system notices) are dropped.
+ * <p>仅分发 {@code message_type == 1}（用户→bot）的负载；其他类型
+ * （bot→用户回声、系统通知）会被丢弃。
  *
- * <p>{@code item_list[]} types mapped:
+ * <p>{@code item_list[]} 类型映射：
  * <ul>
  *   <li>1 → {@link TextBlock}</li>
- *   <li>2 → image: CDN download + AES decrypt → {@link ImageBlock} with {@code file://} URL</li>
- *   <li>3 → voice: prefer ASR text ({@code voice_item.text_item.text} / {@code voice_item.text} /
- *       {@code voice_item.content}); if absent, download → {@link AudioBlock}</li>
- *   <li>4 → file: download → {@link DataBlock} with file name</li>
- *   <li>5 → video: download → {@link VideoBlock}</li>
- *   <li>other → {@link TextBlock} placeholder</li>
+ *   <li>2 → 图片：CDN 下载 + AES 解密 → 含 {@code file://} URL 的 {@link ImageBlock}</li>
+ *   <li>3 → 语音：优先使用 ASR 文本（{@code voice_item.text_item.text} /
+ *       {@code voice_item.text} / {@code voice_item.content}）；缺失则下载 → {@link AudioBlock}</li>
+ *   <li>4 → 文件：下载 → 含文件名的 {@link DataBlock}</li>
+ *   <li>5 → 视频：下载 → {@link VideoBlock}</li>
+ *   <li>其他 → {@link TextBlock} 占位符</li>
  * </ul>
  *
- * <p>Peer mapping:
+ * <p>对端映射：
  * <ul>
- *   <li>DM (no {@code group_id}): {@link PeerKind#DIRECT}, peer id = {@code from_user_id},
+ *   <li>私聊（无 {@code group_id}）：{@link PeerKind#DIRECT}，对端 id = {@code from_user_id}，
  *       senderId = {@code from_user_id}</li>
- *   <li>Group ({@code group_id} present): {@link PeerKind#GROUP}, peer id = {@code group_id},
+ *   <li>群聊（存在 {@code group_id}）：{@link PeerKind#GROUP}，对端 id = {@code group_id}，
  *       senderId = {@code from_user_id}</li>
  * </ul>
  */
@@ -86,7 +86,7 @@ public final class WeixinInboundMapper {
         this.props = Objects.requireNonNull(props, "props");
     }
 
-    /** Builds an {@link InboundMessage} from a single iLink {@code msgs} element. */
+    /** 从单个 iLink {@code msgs} 元素构建 {@link InboundMessage}。 */
     @SuppressWarnings("unchecked")
     public Optional<InboundMessage> map(Map<String, Object> msg) {
         if (msg == null) {
@@ -103,7 +103,7 @@ public final class WeixinInboundMapper {
             return Optional.empty();
         }
 
-        // Cache context_token for outbound replies / proactive pushes.
+        // 缓存 context_token 用于出站回复 / 主动推送。
         tokenStore.put(groupId != null && !groupId.isBlank() ? groupId : fromUserId, contextToken);
 
         List<Map<String, Object>> itemList =
@@ -145,10 +145,10 @@ public final class WeixinInboundMapper {
     }
 
     /**
-     * Extracts a stable idempotency key from a payload. Prefers explicit ids
-     * ({@code msg_id}/{@code msgid}/{@code msgId}/{@code message_id}); falls back to
-     * {@code context_token} (iLink context tokens are unique per user interaction) or a
-     * hash of {@code from_user_id + timestamp + item_list} when none are present.
+     * 从负载中提取稳定的幂等键。优先使用显式 id
+     * （{@code msg_id}/{@code msgid}/{@code msgId}/{@code message_id}）；缺失时回退到
+     * {@code context_token}（iLink 上下文 token 在每次用户交互中唯一），若仍无则使用
+     * {@code from_user_id + timestamp + item_list} 的哈希。
      */
     public static String extractMsgId(Map<String, Object> msg) {
         if (msg == null) return null;
@@ -163,7 +163,7 @@ public final class WeixinInboundMapper {
         if (contextToken != null && !contextToken.isBlank()) {
             return contextToken;
         }
-        // Fallback hash for payloads without any explicit id.
+        // 对无任何显式 id 的负载做哈希兜底。
         String fromUserId = str(msg, "from_user_id");
         Object ts = msg.get("timestamp");
         Object itemList = msg.get("item_list");
@@ -171,7 +171,7 @@ public final class WeixinInboundMapper {
         return "gen_" + Integer.toHexString(hash);
     }
 
-    // ==================== item mappers ====================
+    // ==================== item 映射器 ====================
 
     private void mapText(Map<String, Object> item, List<ContentBlock> out) {
         Map<String, Object> textItem = asMap(item.get("text_item"));
@@ -197,16 +197,16 @@ public final class WeixinInboundMapper {
     private void mapVoice(Map<String, Object> item, List<ContentBlock> out) {
         Map<String, Object> voiceItem = asMap(item.get("voice_item"));
         String asrText = "";
-        // Path 1: voice_item.text_item.text (nested)
+        // Path 1: voice_item.text_item.text（嵌套）
         Map<String, Object> nestedText = asMap(voiceItem.get("text_item"));
         String t1 = str(nestedText, "text");
         if (t1 != null) asrText = t1.strip();
-        // Path 2: voice_item.text (direct)
+        // Path 2: voice_item.text（直接）
         if (asrText.isEmpty()) {
             String t2 = str(voiceItem, "text");
             if (t2 != null) asrText = t2.strip();
         }
-        // Path 3: voice_item.content (WeCom-style field)
+        // Path 3: voice_item.content（企业微信风格字段）
         if (asrText.isEmpty()) {
             String t3 = str(voiceItem, "content");
             if (t3 != null) asrText = t3.strip();
@@ -215,7 +215,7 @@ public final class WeixinInboundMapper {
             out.add(TextBlock.builder().text(asrText).build());
             return;
         }
-        // No ASR: try to download audio and pass to agent as audio block.
+        // 无 ASR：尝试下载音频并以音频块传给 agent。
         byte[] bytes = downloadItem(voiceItem, "voice");
         if (bytes == null) {
             out.add(TextBlock.builder().text("[语音消息]").build());
@@ -260,9 +260,9 @@ public final class WeixinInboundMapper {
                         .build());
     }
 
-    // ==================== media download / persistence ====================
+    // ==================== 媒体下载 / 持久化 ====================
 
-    /** Downloads and AES-decrypts a media item. Returns null on failure. */
+    /** 下载并 AES 解密媒体项；失败返回 null。 */
     private byte[] downloadItem(Map<String, Object> mediaItem, String label) {
         if (!props.mediaDownloadEnabled()) {
             log.debug("[weixin] media download disabled, skip {} item", label);
@@ -274,7 +274,7 @@ public final class WeixinInboundMapper {
             log.warn("[weixin] No encrypt_query_param for {} download", label);
             return null;
         }
-        // image_item carries a top-level hex "aeskey"; other items use media.aes_key (base64).
+        // image_item 顶层携带 hex "aeskey"；其他 item 使用 media.aes_key (base64)。
         String aesKeyHex = str(mediaItem, "aeskey");
         String aesKey =
                 (aesKeyHex != null && !aesKeyHex.isBlank())
@@ -303,7 +303,7 @@ public final class WeixinInboundMapper {
         }
     }
 
-    // ==================== helpers ====================
+    // ==================== 辅助方法 ====================
 
     private static String str(Map<String, Object> map, String key) {
         if (map == null) return null;
@@ -348,7 +348,7 @@ public final class WeixinInboundMapper {
 
     private static String sniffImageMime(byte[] bytes) {
         if (bytes.length < 4) return "image/jpeg";
-        // Magic byte sniffing for common image formats.
+        // 通过魔数嗅探常见图片格式。
         if (bytes[0] == (byte) 0x89 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G') {
             return "image/png";
         }
@@ -358,7 +358,7 @@ public final class WeixinInboundMapper {
         if (bytes[0] == (byte) 0xFF && bytes[1] == (byte) 0xD8) {
             return "image/jpeg";
         }
-        // WeChat commonly uses webp/heic; default to jpeg when inconclusive.
+        // 微信常用 webp/heic；无法确定时默认 jpeg。
         return "image/jpeg";
     }
 

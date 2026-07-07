@@ -23,23 +23,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Long-polling daemon thread for iLink Bot inbound messages.
+ * iLink Bot 入站消息的长轮询守护线程。
  *
- * <p>Pattern is analogous to {@code DingTalkStreamClient} (a per-channel daemon thread driven
- * by {@code start()}/{@code stop()}), but uses iLink's HTTP long-poll endpoint
- * {@code POST /ilink/bot/getupdates} (server holds the connection up to 35s) instead of a
- * WebSocket. Each returned {@code msgs} element is handed to {@code messageConsumer} for
- * idempotency + mapping + dispatch.
+ * <p>模式类似于 {@code DingTalkStreamClient}（按通道启守护线程，由 {@code start()}/{@code stop()}
+ * 控制），但使用 iLink 的 HTTP 长轮询端点 {@code POST /ilink/bot/getupdates}
+ * （服务端会保持连接最多 35 秒）替代 WebSocket。每返回一个 {@code msgs} 元素就交给
+ * {@code messageConsumer} 进行幂等校验 + 映射 + 分发。
  *
- * <p>On {@link TokenExpiredException} the loop terminates and the channel must wait for the
- * user to re-scan a QR code via {@code WeixinQrAuthController}; the controller will replace
- * the bot token on {@link ILinkClient} and call {@link #restart()} to resume polling.
+ * <p>遇到 {@link TokenExpiredException} 时轮询循环终止，通道需等待用户通过
+ * {@code WeixinQrAuthController} 重新扫码；控制器会替换 {@link ILinkClient} 上的 bot token
+ * 并调用 {@link #restart()} 恢复轮询。
  */
 public final class WeixinInboundPoller {
 
     private static final Logger log = LoggerFactory.getLogger(WeixinInboundPoller.class);
 
-    /** Backoff between failed poll attempts (non-token errors). */
+    /** 轮询失败（非 token 错误）时的退避间隔。 */
     private static final long ERROR_BACKOFF_MS = 3000L;
 
     private final String channelId;
@@ -57,7 +56,7 @@ public final class WeixinInboundPoller {
         this.messageConsumer = messageConsumer;
     }
 
-    /** Starts the daemon poll thread; no-op if already running. */
+    /** 启动守护轮询线程；若已在运行则直接返回。 */
     public synchronized void start() {
         if (running) return;
         running = true;
@@ -67,7 +66,7 @@ public final class WeixinInboundPoller {
         pollThread.start();
     }
 
-    /** Stops the poll thread and interrupts any in-flight long-poll. */
+    /** 停止轮询线程并中断任何进行中的长轮询。 */
     public synchronized void stop() {
         running = false;
         if (pollThread != null) {
@@ -76,10 +75,10 @@ public final class WeixinInboundPoller {
         }
     }
 
-    /** Restarts the poller after a fresh bot_token has been loaded. */
+    /** 在加载新的 bot_token 后重启轮询器。 */
     public synchronized void restart() {
         stop();
-        // Brief pause to let the prior socket release.
+        // 短暂等待上一个 socket 释放。
         try {
             Thread.sleep(500L);
         } catch (InterruptedException ie) {

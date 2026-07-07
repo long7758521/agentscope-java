@@ -36,29 +36,26 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 /**
- * WeChat personal account (iLink Bot) channel adapter.
+ * 微信个人号（iLink Bot）通道适配器。
  *
- * <p>Inbound: {@link WeixinInboundPoller} long-polls {@code /ilink/bot/getupdates} on a daemon
- * thread and hands each {@code msgs} element here, where it is deduplicated by
- * {@link IdempotencyStore}, mapped via {@link WeixinInboundMapper} (full media support),
- * throttled by {@link BotLoopGuard}, then routed via {@link ChannelRouter} and executed
- * through the {@link Gateway}. A {@link WeixinTypingIndicator} drives the "正在输入" cue
- * while the agent is reasoning.
+ * <p>入站：{@link WeixinInboundPoller} 在守护线程上长轮询 {@code /ilink/bot/getupdates}，
+ * 并将每个 {@code msgs} 元素交到这里——经 {@link IdempotencyStore} 去重、
+ * {@link WeixinInboundMapper} 映射（完整支持媒体）、{@link BotLoopGuard} 限流，
+ * 然后由 {@link ChannelRouter} 路由并通过 {@link Gateway} 执行。
+ * {@link WeixinTypingIndicator} 在 agent 推理期间驱动"正在输入"提示。
  *
- * <p>Outbound: {@link WeixinOutboundClient} resolves each peer's cached {@code context_token}
- * and routes text/image/voice/video/file blocks to the corresponding {@link ILinkClient}
- * send methods.
+ * <p>出站：{@link WeixinOutboundClient} 解析每个对端缓存的 {@code context_token}，
+ * 将 text/image/voice/video/file 块路由到对应的 {@link ILinkClient} 发送方法。
  *
- * <p>QR login: when no {@code botToken} is supplied via properties, the user scans a QR code
- * through {@link WeixinQrAuthController}; on confirmation the controller invokes
- * {@link #onQrLoginSuccess(String, String)} to update the client credentials and restart
- * the poll loop.
+ * <p>扫码登录：当未通过 properties 提供 {@code botToken} 时，用户通过
+ * {@link WeixinQrAuthController} 扫码登录；确认后控制器调用
+ * {@link #onQrLoginSuccess(String, String)} 更新客户端凭证并重启轮询循环。
  */
 public final class WeixinChannel implements Channel {
 
     private static final Logger log = LoggerFactory.getLogger(WeixinChannel.class);
 
-    /** {@code type} value used in {@code agentscope.json} and {@link io.agentscope.harness.agent.gateway.channel.ChannelFactory}. */
+    /** 在 {@code agentscope.json} 和 {@link io.agentscope.harness.agent.gateway.channel.ChannelFactory} 中使用的 {@code type} 值。 */
     public static final String TYPE = "weixin";
 
     private final String channelId;
@@ -99,11 +96,11 @@ public final class WeixinChannel implements Channel {
         this.idempotency = Objects.requireNonNull(idempotency, "idempotency");
         this.botLoopGuard = Objects.requireNonNull(botLoopGuard, "botLoopGuard");
         this.router = Objects.requireNonNull(router, "router");
-        // Poller is constructed last so its callback can reference this::onInboundPayload safely.
+        // Poller 最后构造，以便其回调可以安全引用 this::onInboundPayload。
         this.poller = new WeixinInboundPoller(channelId, client, this::onInboundPayload);
     }
 
-    /** Factory used by {@link io.agentscope.harness.agent.gateway.channel.ChannelFactory}. */
+    /** 由 {@link io.agentscope.harness.agent.gateway.channel.ChannelFactory} 使用的工厂方法。 */
     public static WeixinChannel fromProperties(
             String channelId, ChannelConfig routing, Map<String, Object> rawProperties) {
         WeixinChannelProperties props = WeixinChannelProperties.from(channelId, rawProperties);
@@ -129,7 +126,7 @@ public final class WeixinChannel implements Channel {
     }
 
     // -----------------------------------------------------------------
-    //  Channel lifecycle
+    //  通道生命周期
     // -----------------------------------------------------------------
 
     @Override
@@ -187,10 +184,8 @@ public final class WeixinChannel implements Channel {
         String contextToken = tokenStore.get(peerId);
         RouteResult route = router.resolveRoute(config, message);
 
-        // typing.onStart is blocking (HTTP getConfig) — run on boundedElastic before invoking
-        // gateway;
-        // typing.onStop is also blocking — run async in doFinally so it never blocks the reactive
-        // stream.
+        // typing.onStart 是阻塞操作（HTTP getConfig）——在调用 gateway 前于 boundedElastic 上执行；
+        // typing.onStop 也是阻塞——在 doFinally 中异步执行，确保永不阻塞响应式流。
         return Mono.<Void>fromRunnable(() -> typing.onStart(peerId, contextToken))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(
@@ -222,7 +217,7 @@ public final class WeixinChannel implements Channel {
     }
 
     // -----------------------------------------------------------------
-    //  Poller callback
+    //  Poller 回调
     // -----------------------------------------------------------------
 
     private void onInboundPayload(Map<String, Object> payload) {
@@ -252,10 +247,10 @@ public final class WeixinChannel implements Channel {
     }
 
     // -----------------------------------------------------------------
-    //  QR login callback (invoked by WeixinQrAuthController)
+    //  扫码登录回调（由 WeixinQrAuthController 调用）
     // -----------------------------------------------------------------
 
-    /** Updates credentials and restarts the poll loop after a successful QR scan. */
+    /** 扫码成功后更新凭证并重启轮询循环。 */
     public void onQrLoginSuccess(String newBotToken, String newBaseUrl) {
         if (newBotToken != null && !newBotToken.isBlank()) {
             client.setBotToken(newBotToken);
@@ -267,7 +262,7 @@ public final class WeixinChannel implements Channel {
         poller.restart();
     }
 
-    /** Package-private accessor for the QR controller. */
+    /** 包级可见的访问器，供 QR 控制器使用。 */
     ILinkClient client() {
         return client;
     }

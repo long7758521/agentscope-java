@@ -62,12 +62,12 @@ public final class WeixinAesUtil {
     static byte[] parseAesKey(String keyParam) {
         String raw = keyParam.strip();
 
-        // Format: raw hex string (e.g. image_item.aeskey — 32 hex chars = 16 bytes)
+        // 格式：原始 hex 字符串（如 image_item.aeskey — 32 个 hex 字符 = 16 字节）
         if (isHex(raw) && (raw.length() == 32 || raw.length() == 48 || raw.length() == 64)) {
             return hexToBytes(raw);
         }
 
-        // Format: base64-encoded
+        // 格式：base64 编码
         byte[] decoded;
         try {
             String padded = raw;
@@ -80,16 +80,16 @@ public final class WeixinAesUtil {
         }
 
         if (decoded.length == 16) {
-            // Format A: base64(raw 16 bytes)
+            // 格式 A：base64(原始 16 字节)
             return decoded;
         }
 
         if (decoded.length == 32 && isHex(new String(decoded))) {
-            // Format B: base64(hex string)
+            // 格式 B：base64(hex 字符串)
             return hexToBytes(new String(decoded));
         }
 
-        // Fallback: use as-is
+        // 兜底：原样使用
         if (decoded.length != 16 && decoded.length != 24 && decoded.length != 32) {
             throw new IllegalArgumentException("Invalid AES key length: " + decoded.length);
         }

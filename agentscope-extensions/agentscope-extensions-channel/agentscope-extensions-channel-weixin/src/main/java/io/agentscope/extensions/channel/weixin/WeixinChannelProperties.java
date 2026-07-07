@@ -19,14 +19,14 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Configuration for a single WeChat personal account (iLink Bot) channel instance.
+ * 单个微信个人号（iLink Bot）通道实例的配置。
  *
- * @param botToken iLink Bot bearer token; may be blank at construction time and
- *     supplied later via QR scan login through {@code WeixinQrAuthController}
- * @param baseUrl iLink API base URL; default {@code https://ilinkai.weixin.qq.com}
- * @param mediaDir local directory for persisting downloaded inbound media;
- *     default {@code data/weixin/{channelId}}
- * @param mediaDownloadEnabled whether to download inbound media to disk; default true
+ * @param botToken iLink Bot bearer token；构造时可为空，稍后通过
+ *     {@code WeixinQrAuthController} 扫码登录注入
+ * @param baseUrl iLink API 基础 URL；默认 {@code https://ilinkai.weixin.qq.com}
+ * @param mediaDir 用于持久化下载的入站媒体的本地目录；
+ *     默认 {@code data/weixin/{channelId}}
+ * @param mediaDownloadEnabled 是否将入站媒体下载到磁盘；默认 true
  */
 public record WeixinChannelProperties(
         String botToken, String baseUrl, String mediaDir, boolean mediaDownloadEnabled) {
@@ -39,7 +39,7 @@ public record WeixinChannelProperties(
         }
     }
 
-    /** Resolves mediaDir against channelId when not explicitly set. */
+    /** 当 mediaDir 未显式设置时，结合 channelId 解析媒体目录。 */
     public String resolveMediaDir(String channelId) {
         if (mediaDir != null && !mediaDir.isBlank()) {
             return mediaDir;
@@ -47,7 +47,7 @@ public record WeixinChannelProperties(
         return "data/weixin/" + channelId;
     }
 
-    /** Reads a {@link WeixinChannelProperties} out of an arbitrary properties map. */
+    /** 从任意 properties map 读取 {@link WeixinChannelProperties}。 */
     public static WeixinChannelProperties from(String channelId, Map<String, Object> props) {
         Objects.requireNonNull(channelId, "channelId");
         Map<String, Object> p = props != null ? props : Map.of();

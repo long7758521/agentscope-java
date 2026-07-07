@@ -19,19 +19,18 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Per-peer context_token cache for the iLink Bot sendmessage API.
+ * iLink Bot sendmessage API 的按对端 context_token 缓存。
  *
- * <p>iLink requires a {@code context_token} on every outbound message; the token is supplied
- * by each inbound message and is only valid for replying within that conversation context.
- * This store caches the most recently observed token per peer id (a {@code from_user_id} for
- * DMs, a {@code group_id} for group chats), enabling both synchronous replies via
- * {@code WeixinChannel.dispatch} and proactive pushes via {@code WeixinChannel.deliver}.
+ * <p>iLink 要求每条出站消息携带 {@code context_token}；该 token 由每条入站消息提供，
+ * 仅在该会话上下文中回复有效。本缓存按对端 id（私聊为 {@code from_user_id}，
+ * 群聊为 {@code group_id}）保存最近观测到的 token，以支持通过
+ * {@code WeixinChannel.dispatch} 同步回复以及通过 {@code WeixinChannel.deliver} 主动推送。
  */
 public final class WeixinContextTokenStore {
 
     private final Map<String, String> peerToToken = new ConcurrentHashMap<>();
 
-    /** Caches (or replaces) the context_token observed for the given peer id. */
+    /** 缓存（或替换）给定对端 id 对应的 context_token。 */
     public void put(String peerId, String contextToken) {
         if (peerId == null || contextToken == null || contextToken.isBlank()) {
             return;
@@ -39,7 +38,7 @@ public final class WeixinContextTokenStore {
         peerToToken.put(peerId, contextToken);
     }
 
-    /** Returns the cached context_token for the peer, or {@code null} if none observed yet. */
+    /** 返回对端对应的缓存 context_token；若尚未观测到则返回 {@code null}。 */
     public String get(String peerId) {
         if (peerId == null) return null;
         return peerToToken.get(peerId);
