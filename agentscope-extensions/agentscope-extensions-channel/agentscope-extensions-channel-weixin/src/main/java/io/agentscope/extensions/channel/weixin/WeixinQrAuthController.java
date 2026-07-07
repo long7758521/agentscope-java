@@ -58,8 +58,7 @@ public class WeixinQrAuthController {
         this.registry = registry;
     }
 
-    /** 从 iLink 获取新的登录二维码。响应结构由 iLink 返回
-     *  （通常为 {@code qrcode}、{@code qrcode_img_content} base64 PNG、{@code url}）。 */
+    /** 从 iLink 获取新的登录二维码。{@code qrcode_img_content} 可能是 base64 PNG，也可能是需编码成二维码的 URL。 */
     @GetMapping("/{channelId}/qrcode")
     public ResponseEntity<Map<String, Object>> qrcode(@PathVariable String channelId) {
         WeixinChannel channel = registry.get(channelId);

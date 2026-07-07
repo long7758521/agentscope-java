@@ -134,6 +134,7 @@ public class ILinkClient {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Content-Type", "application/json");
         headers.put("AuthorizationType", "ilink_bot_token");
+        headers.put("iLink-App-ClientVersion", "1");
         headers.put("X-WECHAT-UIN", uinB64);
         if (botToken != null && !botToken.isBlank()) {
             headers.put("Authorization", "Bearer " + botToken);
