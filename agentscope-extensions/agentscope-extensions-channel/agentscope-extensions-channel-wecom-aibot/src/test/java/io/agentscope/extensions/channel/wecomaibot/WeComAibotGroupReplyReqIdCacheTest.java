@@ -13,23 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.agentscope.claw2.runtime.config;
+package io.agentscope.extensions.channel.wecomaibot;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import org.junit.jupiter.api.Test;
 
-class ChannelTypeRegistryTest {
+class WeComAibotGroupReplyReqIdCacheTest {
 
     @Test
-    void weixinTypeIsRegistered() {
-        assertTrue(ChannelTypeRegistry.registeredTypes().contains("weixin"));
-        assertTrue(ChannelTypeRegistry.get("weixin").isPresent());
-    }
-
-    @Test
-    void wecomAibotTypeIsRegistered() {
-        assertTrue(ChannelTypeRegistry.registeredTypes().contains("wecom-aibot"));
-        assertTrue(ChannelTypeRegistry.get("wecom-aibot").isPresent());
+    void rememberAndPick() {
+        WeComAibotGroupReplyReqIdCache cache = new WeComAibotGroupReplyReqIdCache(2);
+        cache.remember("g1", "r1");
+        assertEquals("r1", cache.pick("g1"));
+        cache.remember("g2", "r2");
+        cache.remember("g3", "r3");
+        assertEquals(2, cache.size());
+        assertNull(cache.pick(null));
     }
 }

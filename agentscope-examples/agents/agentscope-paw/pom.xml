@@ -71,6 +71,10 @@
         </dependency>
         <dependency>
             <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-extensions-channel-wecom-aibot</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.agentscope</groupId>
             <artifactId>agentscope-extensions-channel-github</artifactId>
         </dependency>
         <dependency>

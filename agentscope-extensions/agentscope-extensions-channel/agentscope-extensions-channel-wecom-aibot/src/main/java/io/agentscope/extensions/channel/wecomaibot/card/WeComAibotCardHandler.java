@@ -13,23 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.agentscope.claw2.runtime.config;
+package io.agentscope.extensions.channel.wecomaibot.card;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+/**
+ * Host-provided handler for template card clicks. Implementations must finish quickly — WeCom
+ * allows roughly a 5s window to call {@code aibot_respond_update_msg} using the <em>event</em>
+ * frame {@code req_id}.
+ */
+@FunctionalInterface
+public interface WeComAibotCardHandler {
 
-import org.junit.jupiter.api.Test;
-
-class ChannelTypeRegistryTest {
-
-    @Test
-    void weixinTypeIsRegistered() {
-        assertTrue(ChannelTypeRegistry.registeredTypes().contains("weixin"));
-        assertTrue(ChannelTypeRegistry.get("weixin").isPresent());
-    }
-
-    @Test
-    void wecomAibotTypeIsRegistered() {
-        assertTrue(ChannelTypeRegistry.registeredTypes().contains("wecom-aibot"));
-        assertTrue(ChannelTypeRegistry.get("wecom-aibot").isPresent());
-    }
+    /**
+     * @return optional update body for {@code aibot_respond_update_msg}, or {@code null} to skip
+     *     update
+     */
+    Object handle(WeComAibotCardEvent event) throws Exception;
 }

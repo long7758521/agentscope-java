@@ -13,23 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.agentscope.claw2.runtime.config;
+package io.agentscope.extensions.channel.wecomaibot.card;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.Map;
 
-import org.junit.jupiter.api.Test;
-
-class ChannelTypeRegistryTest {
-
-    @Test
-    void weixinTypeIsRegistered() {
-        assertTrue(ChannelTypeRegistry.registeredTypes().contains("weixin"));
-        assertTrue(ChannelTypeRegistry.get("weixin").isPresent());
-    }
-
-    @Test
-    void wecomAibotTypeIsRegistered() {
-        assertTrue(ChannelTypeRegistry.registeredTypes().contains("wecom-aibot"));
-        assertTrue(ChannelTypeRegistry.get("wecom-aibot").isPresent());
-    }
-}
+/** Event payload for {@code aibot_event_callback} with {@code eventtype=template_card_event}. */
+public record WeComAibotCardEvent(
+        String channelId,
+        String frameReqId,
+        String taskId,
+        String eventKey,
+        String clickerUserId,
+        String chatId,
+        String chatType,
+        Map<String, Object> rawBody) {}

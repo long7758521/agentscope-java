@@ -8,7 +8,8 @@
 | [飞书](feishu.md) | Feishu / Lark（飞书） | 事件订阅回调（HTTP） |
 | [GitHub](github.md) | GitHub | Webhook（HTTP） |
 | [GitLab](gitlab.md) | GitLab | Webhook（HTTP） |
-| [企业微信](wecom.md) | WeCom（企业微信） | 加密回调（HTTP） |
+| [企业微信](wecom.md) | WeCom（企业微信）自建应用 | 加密回调（HTTP） |
+| [企业微信智能机器人](wecom-aibot.md) | WeCom 智能机器人（长连接） | WebSocket（`aibot_subscribe`） |
 
 ## 工作原理
 
