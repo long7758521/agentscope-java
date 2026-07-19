@@ -18,7 +18,7 @@ package io.agentscope.extensions.channel.wecomaibot;
 import java.util.Locale;
 import java.util.Set;
 
-/** Pre-upload size / MIME checks aligned with MateClaw {@code applyWeComUploadLimits}. */
+/** Pre-upload size / MIME checks against WeCom AI Bot platform limits. */
 public final class WeComAibotUploadLimits {
 
     public static final long IMAGE_MAX_BYTES = 10L * 1024 * 1024;

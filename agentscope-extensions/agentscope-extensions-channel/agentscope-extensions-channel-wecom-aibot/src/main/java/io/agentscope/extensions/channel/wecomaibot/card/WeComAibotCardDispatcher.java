@@ -24,7 +24,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Routes {@code template_card_event} to registered handlers by {@code task_id} prefix / kind.
  *
- * <p>Does not bind MateClaw ApprovalService — hosts register their own {@link WeComAibotCardHandler}.
+ * <p>Hosts register their own {@link WeComAibotCardHandler} implementations; this module does not
+ * bind any approval business logic.
  */
 public final class WeComAibotCardDispatcher {
 

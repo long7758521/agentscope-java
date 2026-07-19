@@ -15,11 +15,30 @@
  */
 package io.agentscope.extensions.channel.wecomaibot;
 
+import io.agentscope.core.message.AudioBlock;
+import io.agentscope.core.message.Base64Source;
+import io.agentscope.core.message.ContentBlock;
+import io.agentscope.core.message.DataBlock;
+import io.agentscope.core.message.ImageBlock;
 import io.agentscope.core.message.Msg;
+import io.agentscope.core.message.Source;
+import io.agentscope.core.message.TextBlock;
+import io.agentscope.core.message.URLSource;
+import io.agentscope.core.message.VideoBlock;
 import io.agentscope.harness.agent.gateway.channel.OutboundAddress;
 import io.agentscope.harness.agent.gateway.channel.PeerKind;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -29,14 +48,22 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-/** Outbound markdown / stream / welcome / proactive send for WeCom AI Bot. */
+/**
+ * Outbound client for WeCom AI Bot: stream / markdown / media / welcome / template card.
+ *
+ * <p>Each {@link Msg} is dispatched by {@link ContentBlock}: text becomes stream-finish or
+ * markdown; image / audio / file / video blocks are uploaded via {@link WeComAibotMediaUploader}
+ * then sent as {@code msgtype=image|file|voice|video} with {@code media_id}.
+ */
 public final class WeComAibotOutboundClient {
 
     private static final Logger log = LoggerFactory.getLogger(WeComAibotOutboundClient.class);
 
+    private static final Duration URL_FETCH_TIMEOUT = Duration.ofSeconds(60);
+
     public static final String PROCESSING_TEXT = "思考中...";
 
-    /** Clears the processing stream when the agent returns no text (aligned with MateClaw). */
+    /** Clears the processing stream when the agent returns no sendable content. */
     public static final String DONE_TEXT = "✅ Done";
 
     /** Clears the processing stream when dispatch fails. */
@@ -46,10 +73,12 @@ public final class WeComAibotOutboundClient {
     private final WeComAibotReplyQueue replyQueue;
     private final WeComAibotGroupReplyReqIdCache groupReqIds;
     private final AtomicLong reqCounter;
+    private final HttpClient httpDownloader;
     private final ConcurrentHashMap<String, String> streamLastContent = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ReplyContext> replyContexts = new ConcurrentHashMap<>();
 
     private volatile FrameTransport transport;
+    private volatile WeComAibotMediaUploader mediaUploader;
 
     /** Stops keepalive for a streamId before finish=true (must be set by the channel). */
     private volatile Consumer<String> keepaliveStopper;
@@ -63,10 +92,16 @@ public final class WeComAibotOutboundClient {
         this.replyQueue = replyQueue;
         this.groupReqIds = groupReqIds;
         this.reqCounter = reqCounter;
+        this.httpDownloader =
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
 
     public void setTransport(FrameTransport transport) {
         this.transport = transport;
+    }
+
+    public void setMediaUploader(WeComAibotMediaUploader mediaUploader) {
+        this.mediaUploader = mediaUploader;
     }
 
     public void setKeepaliveStopper(Consumer<String> keepaliveStopper) {
@@ -125,22 +160,252 @@ public final class WeComAibotOutboundClient {
             stopKeepalive(ctx.streamId());
         }
         boolean usedStream = false;
+        boolean sentAnything = false;
+        String replyFrameReqId = ctx != null ? ctx.frameReqId() : null;
+
         for (Msg msg : messages) {
-            String text = msg.getTextContent();
-            if (text == null || text.isBlank()) {
-                continue;
+            List<ContentBlock> blocks = msg.getContent();
+            if (blocks == null || blocks.isEmpty()) {
+                String text = msg.getTextContent();
+                if (text != null && !text.isBlank()) {
+                    blocks = List.of(TextBlock.builder().text(text).build());
+                } else {
+                    continue;
+                }
             }
-            if (ctx != null && !usedStream) {
-                replyStream(ctx.frameReqId(), ctx.streamId(), text, true);
-                usedStream = true;
-            } else {
-                sendMarkdown(target, text);
+            for (ContentBlock block : blocks) {
+                try {
+                    if (block instanceof TextBlock t) {
+                        String text = t.getText();
+                        if (text == null || text.isBlank()) {
+                            continue;
+                        }
+                        String formatted = WeComAibotMarkdownTables.format(text);
+                        if (ctx != null && !usedStream) {
+                            replyStream(ctx.frameReqId(), ctx.streamId(), formatted, true);
+                            usedStream = true;
+                            // First text consumed the inbound reply slot; later media uses
+                            // proactive / cached group req_id.
+                            replyFrameReqId = null;
+                        } else {
+                            sendMarkdown(target, formatted);
+                        }
+                        sentAnything = true;
+                    } else if (block instanceof ImageBlock ib) {
+                        sentAnything |=
+                                sendMediaBlock(
+                                        target,
+                                        resolveBytes(ib.getSource()),
+                                        "image",
+                                        fileNameFromSource(ib.getSource(), "image.jpg"),
+                                        mimeFromSource(ib.getSource(), "image/jpeg"),
+                                        replyFrameReqId);
+                        replyFrameReqId = null;
+                    } else if (block instanceof AudioBlock ab) {
+                        String name = fileNameFromSource(ab.getSource(), "voice.amr");
+                        boolean amr = name.toLowerCase(Locale.ROOT).endsWith(".amr");
+                        sentAnything |=
+                                sendMediaBlock(
+                                        target,
+                                        resolveBytes(ab.getSource()),
+                                        amr ? "voice" : "file",
+                                        name,
+                                        mimeFromSource(
+                                                ab.getSource(), amr ? "audio/amr" : "audio/mpeg"),
+                                        replyFrameReqId);
+                        replyFrameReqId = null;
+                    } else if (block instanceof VideoBlock vb) {
+                        sentAnything |=
+                                sendMediaBlock(
+                                        target,
+                                        resolveBytes(vb.getSource()),
+                                        "video",
+                                        fileNameFromSource(vb.getSource(), "video.mp4"),
+                                        mimeFromSource(vb.getSource(), "video/mp4"),
+                                        replyFrameReqId);
+                        replyFrameReqId = null;
+                    } else if (block instanceof DataBlock db) {
+                        String name = db.getName() != null ? db.getName() : "file.bin";
+                        sentAnything |=
+                                sendMediaBlock(
+                                        target,
+                                        resolveBytes(db.getSource()),
+                                        "file",
+                                        name,
+                                        mimeFromSource(db.getSource(), null),
+                                        replyFrameReqId);
+                        replyFrameReqId = null;
+                    } else {
+                        log.debug(
+                                "[wecom-aibot:{}] unsupported outbound block {}, skip",
+                                channelId,
+                                block.getClass().getSimpleName());
+                    }
+                } catch (Exception e) {
+                    log.warn(
+                            "[wecom-aibot:{}] send block {} failed: {}",
+                            channelId,
+                            block.getClass().getSimpleName(),
+                            e.getMessage());
+                    sendFallback(target, block);
+                    sentAnything = true;
+                }
             }
         }
-        // No text but we had a processing indicator — clear「思考中...」like MateClaw.
-        if (ctx != null && !usedStream) {
+        // No content but we had a processing indicator — clear「思考中...」so the slot closes.
+        if (ctx != null && !usedStream && !sentAnything) {
+            replyStream(ctx.frameReqId(), ctx.streamId(), DONE_TEXT, true);
+        } else if (ctx != null && !usedStream && sentAnything) {
+            // Media-only reply: still close the processing stream slot.
             replyStream(ctx.frameReqId(), ctx.streamId(), DONE_TEXT, true);
         }
+    }
+
+    private boolean sendMediaBlock(
+            PeerTarget target,
+            byte[] bytes,
+            String mediaType,
+            String fileName,
+            String contentType,
+            String frameReqId) {
+        if (bytes == null || bytes.length == 0) {
+            sendMarkdown(target, fallbackLabel(mediaType, fileName));
+            return true;
+        }
+        WeComAibotMediaUploader uploader = mediaUploader;
+        if (uploader == null) {
+            log.warn(
+                    "[wecom-aibot:{}] media uploader not set; cannot send {}",
+                    channelId,
+                    mediaType);
+            sendMarkdown(target, fallbackLabel(mediaType, fileName));
+            return true;
+        }
+        WeComAibotUploadLimits.Decision decision =
+                WeComAibotUploadLimits.apply(bytes.length, mediaType, contentType);
+        if (decision.rejected()) {
+            sendMarkdown(target, "⚠️ " + decision.message());
+            return true;
+        }
+        String effectiveType = decision.downgraded() ? decision.mediaType() : mediaType;
+        String mediaId = uploader.upload(bytes, effectiveType, fileName, contentType);
+        if (mediaId == null) {
+            sendMarkdown(target, fallbackLabel(mediaType, fileName));
+            return true;
+        }
+        sendMediaMessage(target, mediaId, effectiveType, frameReqId);
+        if (decision.downgraded() && decision.message() != null) {
+            sendMarkdown(target, "ℹ️ " + decision.message());
+        }
+        return true;
+    }
+
+    /**
+     * Sends a native media message. When {@code frameReqId} is present, rides {@code
+     * aibot_respond_msg}; otherwise uses proactive send (group prefers cached inbound req_id).
+     */
+    public void sendMediaMessage(
+            PeerTarget target, String mediaId, String mediaType, String frameReqId) {
+        Map<String, Object> mediaBody = new LinkedHashMap<>();
+        mediaBody.put("msgtype", mediaType);
+        mediaBody.put(mediaType, Map.of("media_id", mediaId));
+        if (frameReqId != null && !frameReqId.isBlank()) {
+            Map<String, Object> frame = new LinkedHashMap<>();
+            frame.put("cmd", "aibot_respond_msg");
+            frame.put("headers", Map.of("req_id", frameReqId));
+            frame.put("body", mediaBody);
+            enqueueRespond(frameReqId, frame);
+            return;
+        }
+        sendOutboundBody(target, mediaBody);
+    }
+
+    private void sendFallback(PeerTarget target, ContentBlock block) {
+        if (block instanceof ImageBlock ib && ib.getSource() instanceof URLSource u) {
+            sendMarkdown(target, "![image](" + u.getUrl() + ")");
+        } else if (block instanceof DataBlock db) {
+            sendMarkdown(target, "[文件: " + (db.getName() != null ? db.getName() : "file") + "]");
+        } else if (block instanceof AudioBlock) {
+            sendMarkdown(target, "[语音回复]");
+        } else if (block instanceof VideoBlock) {
+            sendMarkdown(target, "[视频]");
+        }
+    }
+
+    private static String fallbackLabel(String mediaType, String fileName) {
+        return switch (mediaType == null ? "" : mediaType) {
+            case "image" -> "[图片]";
+            case "voice" -> "[语音回复]";
+            case "video" -> "[视频]";
+            default -> "[文件: " + (fileName != null ? fileName : "file") + "]";
+        };
+    }
+
+    private byte[] resolveBytes(Source src) throws Exception {
+        if (src == null) {
+            return null;
+        }
+        if (src instanceof URLSource u) {
+            String url = u.getUrl();
+            if (url == null || url.isBlank()) {
+                return null;
+            }
+            URI uri = URI.create(url);
+            if ("file".equalsIgnoreCase(uri.getScheme())) {
+                Path p = Paths.get(uri);
+                return Files.readAllBytes(p);
+            }
+            HttpRequest req =
+                    HttpRequest.newBuilder().uri(uri).timeout(URL_FETCH_TIMEOUT).GET().build();
+            HttpResponse<byte[]> resp =
+                    httpDownloader.send(req, HttpResponse.BodyHandlers.ofByteArray());
+            if (resp.statusCode() / 100 != 2) {
+                throw new RuntimeException(
+                        "URL fetch failed: HTTP " + resp.statusCode() + " for " + url);
+            }
+            return resp.body();
+        }
+        if (src instanceof Base64Source b) {
+            return Base64.getDecoder().decode(b.getData());
+        }
+        log.warn(
+                "[wecom-aibot:{}] unknown source type {}",
+                channelId,
+                src.getClass().getSimpleName());
+        return null;
+    }
+
+    private static String mimeFromSource(Source src, String fallback) {
+        if (src instanceof URLSource u && u.getMimeType() != null && !u.getMimeType().isBlank()) {
+            return u.getMimeType();
+        }
+        if (src instanceof Base64Source b
+                && b.getMediaType() != null
+                && !b.getMediaType().isBlank()) {
+            return b.getMediaType();
+        }
+        return fallback;
+    }
+
+    private static String fileNameFromSource(Source src, String fallback) {
+        if (src instanceof URLSource u) {
+            String url = u.getUrl();
+            if (url != null) {
+                try {
+                    String path = URI.create(url).getPath();
+                    if (path != null) {
+                        int slash = path.lastIndexOf('/');
+                        String name = slash >= 0 ? path.substring(slash + 1) : path;
+                        if (!name.isBlank() && name.contains(".")) {
+                            return name;
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // fall through
+                }
+            }
+        }
+        return fallback;
     }
 
     public void sendWelcome(String frameReqId, String welcomeText) {
@@ -158,7 +423,7 @@ public final class WeComAibotOutboundClient {
     }
 
     public void replyStream(String frameReqId, String streamId, String content, boolean finish) {
-        replyStream(frameReqId, streamId, content, finish, false);
+        replyStream(frameReqId, streamId, content, finish, false, null);
     }
 
     /**
@@ -167,6 +432,20 @@ public final class WeComAibotOutboundClient {
      */
     public void replyStream(
             String frameReqId, String streamId, String content, boolean finish, boolean force) {
+        replyStream(frameReqId, streamId, content, finish, force, null);
+    }
+
+    /**
+     * Streaming reply. {@code feedbackId} is only attached when {@code finish=true} (WeCom AI Bot
+     * protocol: feedback is meaningful on the finishing chunk).
+     */
+    public void replyStream(
+            String frameReqId,
+            String streamId,
+            String content,
+            boolean finish,
+            boolean force,
+            String feedbackId) {
         if (frameReqId == null || streamId == null) {
             return;
         }
@@ -180,6 +459,9 @@ public final class WeComAibotOutboundClient {
         stream.put("id", streamId);
         stream.put("finish", finish);
         stream.put("content", content != null ? content : "");
+        if (finish && feedbackId != null && !feedbackId.isBlank()) {
+            stream.put("feedback", Map.of("id", feedbackId));
+        }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("msgtype", "stream");
         body.put("stream", stream);
@@ -238,13 +520,21 @@ public final class WeComAibotOutboundClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("msgtype", "markdown");
         body.put("markdown", Map.of("content", text));
+        sendOutboundBody(target, body);
+    }
+
+    /**
+     * Proactive / follow-up outbound body. Group chats prefer a cached inbound {@code req_id} via
+     * {@code aibot_respond_msg}; otherwise {@code aibot_send_msg} (may be rejected in groups).
+     */
+    private void sendOutboundBody(PeerTarget target, Map<String, Object> bodyWithMsgtype) {
         if (target.kind() == PeerKind.GROUP) {
             String cached = groupReqIds.pick(target.id());
             if (cached != null) {
                 Map<String, Object> frame = new LinkedHashMap<>();
                 frame.put("cmd", "aibot_respond_msg");
                 frame.put("headers", Map.of("req_id", cached));
-                frame.put("body", body);
+                frame.put("body", bodyWithMsgtype);
                 enqueueRespond(cached, frame);
                 return;
             }
@@ -253,6 +543,7 @@ public final class WeComAibotOutboundClient {
                             + " aibot_send_msg (may be rejected)",
                     channelId);
         }
+        Map<String, Object> body = new LinkedHashMap<>(bodyWithMsgtype);
         body.put("chatid", target.id());
         Map<String, Object> frame = new LinkedHashMap<>();
         frame.put("cmd", "aibot_send_msg");
@@ -282,7 +573,7 @@ public final class WeComAibotOutboundClient {
         return prefix + "_" + System.currentTimeMillis() + "_" + reqCounter.incrementAndGet();
     }
 
-    private static PeerTarget parseAddress(OutboundAddress address) {
+    static PeerTarget parseAddress(OutboundAddress address) {
         String to = address.to();
         int sep = to.indexOf(':');
         if (sep < 0) {
@@ -301,7 +592,7 @@ public final class WeComAibotOutboundClient {
         }
         PeerKind kind;
         try {
-            kind = PeerKind.valueOf(kindRaw.toUpperCase());
+            kind = PeerKind.valueOf(kindRaw.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             kind = PeerKind.DIRECT;
         }
@@ -310,7 +601,7 @@ public final class WeComAibotOutboundClient {
 
     public record ReplyContext(String frameReqId, String streamId) {}
 
-    private record PeerTarget(PeerKind kind, String id) {}
+    public record PeerTarget(PeerKind kind, String id) {}
 
     @FunctionalInterface
     public interface FrameTransport {

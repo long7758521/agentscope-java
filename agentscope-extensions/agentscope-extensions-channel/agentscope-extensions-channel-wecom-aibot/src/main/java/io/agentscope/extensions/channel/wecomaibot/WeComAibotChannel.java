@@ -129,6 +129,7 @@ public final class WeComAibotChannel implements Channel {
         WeComAibotCardDispatcher cards = new WeComAibotCardDispatcher();
         cards.setUpdateSender(outbound::updateTemplateCard);
         outbound.setTransport(wsClient::sendFrame);
+        outbound.setMediaUploader(uploader);
         outbound.setKeepaliveStopper(keepalive::stop);
 
         WeComAibotChannel channel =

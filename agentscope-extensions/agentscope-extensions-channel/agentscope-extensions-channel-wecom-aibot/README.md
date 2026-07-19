@@ -17,7 +17,7 @@
 - **入站**：WebSocket 接收 `aibot_msg_callback` / `aibot_event_callback`（无需公网 webhook）。
 - **出站**：`aibot_respond_msg`（绑定入站 `req_id`）、`aibot_send_msg`（单聊主动推）、`aibot_respond_welcome_msg`、stream 占位覆盖。
 - **认证**：`bot_id` + `secret`；可延迟填写（宿主扫码后再 `onCredentialsUpdated`）；提供 `WeComAibotVerifier` 一次性探针。
-- **媒体**：入站 AES-256-CBC 解密落盘；出站分块上传（`aibot_upload_media_*`，字段必须为 `base64_data`）；上传限制与图片压缩。
+- **媒体**：入站 AES-256-CBC 解密落盘为 `ImageBlock`/`DataBlock`（无后缀默认 `image.jpg`，magic-byte 纠正）；出站分块上传（`aibot_upload_media_*`）后发原生 `media_id` 消息；上传限制与图片压缩。
 - **群聊**：缓存 `lastChatReqIds`，群主动推优先走 `aibot_respond_msg`（平台拒绝群聊裸 `aibot_send_msg`）。
 - **可靠性**：心跳、指数退避重连、stale socket 忽略、`disconnectInflight` 去重、reply 队列串行与 gate、IdempotencyStore / BotLoopGuard。
 - **卡片**：`template_card` 发送与 `template_card_event` 点击路由（`WeComAibotCardHandler` SPI，不绑定具体审批业务）。
@@ -43,6 +43,8 @@ agentscope-extensions-channel-wecom-aibot/
     ├── WeComAibotMediaCrypto.java          # AES-256-CBC 入站解密
     ├── WeComAibotMediaUploader.java        # init / chunk / finish 上传
     ├── WeComAibotUploadLimits.java         # 大小 / MIME 预检
+    ├── WeComAibotMediaTypeSniffer.java     # 入站 magic-byte 扩展名
+    ├── WeComAibotMarkdownTables.java       # 出站 Markdown 表格列宽对齐
     ├── WeComAibotImageCompressor.java      # >1.9MB JPEG 压缩
     ├── WeComAibotExponentialBackoff.java   # 重连退避
     ├── WeComAibotVerifier.java             # 一次性 WS 凭证探针
@@ -222,13 +224,14 @@ channel.cardDispatcher().register("tg_approval_", event -> {
 
 | msgtype | 行为 |
 |---------|------|
-| `text` | 文本 → Agent |
-| `voice` | ASR 文本；空则 `[语音消息]` |
-| `image` / `file` | 可选下载+AES 解密落盘，或 URL 占位 |
-| `mixed` | 解析 `msg_item[]` |
-| `appmsg` | 标题/链接摘要；公众号链接附加防幻觉提示 |
+| `text` | `TextBlock` → Agent |
+| `voice` | ASR 文本 `TextBlock`；空则 `[语音消息]` |
+| `image` | 下载+AES 解密落盘 → `ImageBlock`（`file://`）；无 filename 时默认 `image.jpg`（企微 URL 常无后缀）；可选 magic-byte 纠正扩展名 |
+| `file` | 下载落盘 → `DataBlock`；无扩展名时可 sniff |
+| `mixed` | 展开 `msg_item[]` 为多块 |
+| `appmsg` | `file`/`image`/`miniprogram`/`url`（公众号链接附加防幻觉提示） |
 | `video` 及其他 | **忽略**（不 dispatch） |
-| `quote`（字段） | 前缀 `[引用消息: …]` |
+| `quote`（字段） | 前缀 `[引用消息: …]` + 引用媒体块 |
 
 **事件（`aibot_event_callback`）：**
 
@@ -242,9 +245,10 @@ channel.cardDispatcher().register("tg_approval_", event -> {
 
 | 场景 | cmd / msgtype |
 |------|----------------|
-| Agent 回复（有 reply context） | `aibot_respond_msg` + `stream`（先占位，再 `finish=true` 覆盖） |
-| 单聊主动推 | `aibot_send_msg` + `markdown` |
-| 群聊主动推（有缓存 req_id） | `aibot_respond_msg` + `markdown` |
+| Agent 文本回复（有 reply context） | `aibot_respond_msg` + `stream`（先占位，再 `finish=true` 覆盖；表格列宽对齐） |
+| Agent 图片/文件/语音/视频块 | 上传 `aibot_upload_media_*` → `msgtype=image\|file\|voice\|video` + `media_id` |
+| 单聊主动推 | `aibot_send_msg` + `markdown` / media |
+| 群聊主动推（有缓存 req_id） | `aibot_respond_msg` + `markdown` / media |
 | 欢迎语 | `aibot_respond_welcome_msg` + `text` |
 | 卡片 | `aibot_respond_msg` + `template_card` / `aibot_respond_update_msg` |
 
@@ -285,6 +289,7 @@ ACK 帧通常无 `cmd`，按 `headers.req_id` 匹配，顶层含 `errcode` / `er
 4. 卡片更新依赖平台约 5s 窗口，超时无重试。
 5. 同 bot 凭证多进程会重复消费（**single-leader**）。
 6. 扫码授权 UI 不在本模块（宿主集成官方 `wecom-aibot-sdk`）。
+7. 入站媒体下载关闭或失败时，加密 COS URL 对模型通常不可读；请保持 `mediaDownloadEnabled=true`。
 
 ## 相关文档
 
