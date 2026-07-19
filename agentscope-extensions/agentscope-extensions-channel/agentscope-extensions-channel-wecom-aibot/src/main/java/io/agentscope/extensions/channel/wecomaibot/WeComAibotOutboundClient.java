@@ -61,7 +61,7 @@ public final class WeComAibotOutboundClient {
 
     private static final Duration URL_FETCH_TIMEOUT = Duration.ofSeconds(60);
 
-    public static final String PROCESSING_TEXT = "思考中...";
+    public static final String PROCESSING_TEXT = "🤔 思考中...";
 
     /** Clears the processing stream when the agent returns no sendable content. */
     public static final String DONE_TEXT = "✅ Done";
